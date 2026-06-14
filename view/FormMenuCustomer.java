@@ -10,14 +10,34 @@ import java.awt.event.MouseEvent;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
 
 public class FormMenuCustomer extends JFrame {
 
     private JPanel panelKatalogGrid;
     private JLabel lblNamaUser, lblBukuDipinjam;
+    private JTextField txtCari; // Dinaikkan ke scope class agar bisa diakses method lain
     private int idAnggotaLogin = 5; // Contoh ID Anggota
 
+    // ===== SIMULASI DATABASE OFFLINE (ARRAYLIST) =====
+    private ArrayList<BukuLokal> listBuku = new ArrayList<>();
+
+    // Class pembantu internal untuk menampung data objek buku secara offline
+    class BukuLokal {
+        int id; String judul, pengarang, penerbit, gambar;
+        BukuLokal(int id, String j, String p, String pb, String g) {
+            this.id = id; this.judul = j; this.pengarang = p; this.penerbit = pb; this.gambar = g;
+        }
+    }
+
     public FormMenuCustomer() {
+        // Inisialisasi Data Buku Lokal (Bahan Bakar Mode Offline)
+        listBuku.add(new BukuLokal(1, "The Atomic Love", "Alvia Glenn", "BooksHub Media", "atomic.jpg"));
+        listBuku.add(new BukuLokal(2, "Laut Bercerita", "Leila S. Chudori", "KPG", "laut.jpg"));
+        listBuku.add(new BukuLokal(3, "Siddhartha", "Hermann Hesse", "Bentang Budaya", "siddhartha.jpg"));
+        listBuku.add(new BukuLokal(4, "Bumi Manusia", "Pramoedya Ananta Toer", "Lentera Dipantara", "bumi.jpg"));
+        listBuku.add(new BukuLokal(5, "PBO Cerdas dengan Java", "Kelompok 3", "Informatika", "pbo.jpg"));
+
         setTitle("BooksHub - Customer Digital Library Browser");
         setSize(1050, 680);
         setLocationRelativeTo(null);
@@ -41,14 +61,43 @@ public class FormMenuCustomer extends JFrame {
 
         JPanel panelCari = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
         panelCari.setOpaque(false);
-        JTextField txtCari = new JTextField("Cari judul buku atau penulis...");
+        txtCari = new JTextField("Cari judul buku atau penulis...");
         txtCari.setPreferredSize(new Dimension(250, 30));
         txtCari.setForeground(Color.GRAY);
+
+        // --- Logika Interaktif Kolom Pencarian ---
+        txtCari.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (txtCari.getText().equals("Cari judul buku atau penulis...")) {
+                    txtCari.setText("");
+                    txtCari.setForeground(Color.BLACK);
+                }
+            }
+        });
+
+        // Trigger pencarian saat menekan tombol Enter di keyboard
+        txtCari.addActionListener(e -> {
+            String keyword = txtCari.getText().trim();
+            if (!keyword.isEmpty() && !keyword.equals("Cari judul buku atau penulis...")) {
+                cariKatalogBukuOffline(keyword);
+            } else {
+                tampilkanKatalogMasyarakat();
+            }
+        });
 
         JButton btnKeluar = new JButton("Logout");
         btnKeluar.setBackground(new Color(194, 43, 38));
         btnKeluar.setForeground(Color.WHITE);
-        btnKeluar.addActionListener(e -> { dispose(); System.exit(0); });
+        btnKeluar.addActionListener(e -> {
+            int konfirmasi = JOptionPane.showConfirmDialog(
+                    this, "Apakah Anda yakin ingin logout?", "Logout", JOptionPane.YES_NO_OPTION
+            );
+            if (konfirmasi == JOptionPane.YES_OPTION) {
+                dispose();
+                System.exit(0);
+            }
+        });
 
         panelCari.add(txtCari);
         panelCari.add(btnKeluar);
@@ -101,41 +150,39 @@ public class FormMenuCustomer extends JFrame {
         scrollKatalog.setBorder(null);
         add(scrollKatalog, BorderLayout.CENTER);
 
+        // Panggil penampil data utama
         tampilkanKatalogMasyarakat();
     }
 
     private void tampilkanKatalogMasyarakat() {
         panelKatalogGrid.removeAll();
 
-        String query = "SELECT * FROM buku ORDER BY id_buku DESC";
-        try (Connection c = Koneksi.getConnection();
-             Statement s = c.createStatement();
-             ResultSet r = s.executeQuery(query)) {
+        // FULL OFFLINE: Membaca langsung dari ArrayList lokal agar super cepat dan anti-stuck
+        for (BukuLokal b : listBuku) {
+            buatCardBuku(b.id, b.judul, b.pengarang, b.penerbit, b.gambar);
+        }
 
-            while (r.next()) {
-                int idBuku = r.getInt("id_buku");
-                String judul = r.getString("judul");
-                String pengarang = r.getString("pengarang");
+        panelKatalogGrid.revalidate();
+        panelKatalogGrid.repaint();
+    }
 
-                // Amankan kolom gambar jika belum dibuat di phpMyAdmin
-                String namaGambar = "";
-                try {
-                    namaGambar = r.getString("gambar");
-                } catch (Exception e) {
-                    namaGambar = "";
-                }
+    private void cariKatalogBukuOffline(String keyword) {
+        panelKatalogGrid.removeAll();
+        boolean ditemukan = false;
 
-                String penerbit = "";
-                try { penerbit = r.getString("penerbit"); } catch (Exception e) { penerbit = "Unknown Publisher"; }
-
-                buatCardBuku(idBuku, judul, pengarang, penerbit, namaGambar);
+        // Loop untuk memfilter data berdasarkan input teks user
+        for (BukuLokal b : listBuku) {
+            if (b.judul.toLowerCase().contains(keyword.toLowerCase()) ||
+                    b.pengarang.toLowerCase().contains(keyword.toLowerCase())) {
+                buatCardBuku(b.id, b.judul, b.pengarang, b.penerbit, b.gambar);
+                ditemukan = true;
             }
+        }
 
-        } catch (Exception e) {
-            // Mode Cadangan Otomatis jika database offline / kolom belum siap
-            buatCardBuku(1, "The Atomic Love", "Alvia Glenn", "BooksHub Media", "atomic.jpg");
-            buatCardBuku(2, "Laut Bercerita", "Leila S. Chudori", "KPG", "laut.jpg");
-            buatCardBuku(3, "Siddhartha", "Hermann Hesse", "Bentang Budaya", "siddhartha.jpg");
+        if (!ditemukan) {
+            JLabel lblEmpty = new JLabel("<html><center>Buku \"" + keyword + "\" tidak ditemukan... 🔍<br>Coba kata kunci lain.</center></html>", SwingConstants.CENTER);
+            lblEmpty.setFont(new Font("Georgia", Font.ITALIC, 14));
+            panelKatalogGrid.add(lblEmpty);
         }
 
         panelKatalogGrid.revalidate();
@@ -172,7 +219,7 @@ public class FormMenuCustomer extends JFrame {
                 lblCover.setText("📕 " + judul);
             }
         } else {
-            // Kotak Cadangan Aesthetic
+            // Kotak Cadangan Aesthetic jika file fisik gambar belum dimasukkan
             lblCover.setText("<html><center>📕<br><br>" + judul + "</center></html>");
             lblCover.setOpaque(true);
             lblCover.setBackground(new Color(194, 43, 38, 20));
@@ -261,7 +308,7 @@ public class FormMenuCustomer extends JFrame {
         popup.add(pnlKonten, BorderLayout.CENTER);
 
         JPanel pnlTombol = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 15));
-        pnlTombol.setBackground(new Color(245, 240, 225));
+        pnlTombol.setBackground(new Color(245, 240, 225)); // Diperbaiki dari pnlTombol asli
 
         JButton btnTutup = new JButton("Tutup");
         btnTutup.addActionListener(e -> popup.dispose());
@@ -294,17 +341,16 @@ public class FormMenuCustomer extends JFrame {
     }
 
     private void prosesPinjamMandiri(int idBuku, String judulBuku) {
-        String query = "INSERT INTO peminjaman (id_anggota, id_buku, tgl_pinjam, status) VALUES (?, ?, CURDATE(), 'Dipinjam')";
-        try (Connection c = Koneksi.getConnection();
-             java.sql.PreparedStatement p = c.prepareStatement(query)) {
-            p.setInt(1, idAnggotaLogin);
-            p.setInt(2, idBuku);
-            p.executeUpdate();
-
-            JOptionPane.showMessageDialog(this, "Sukses meminjam \"" + judulBuku + "\"!\nSilakan ambil fisik buku di meja petugas.");
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Sukses mengajukan simulasi peminjaman \"" + judulBuku + "\"!");
-        }
+        // SIMULASI OFFLINE: Menampilkan pesan info terstruktur tanpa bikin aplikasi macet
+        JOptionPane.showMessageDialog(this,
+                "=== [Simulasi Offline Sukses] ===\n\n" +
+                        "Berhasil mengajukan transaksi peminjaman:\n" +
+                        "» Judul Buku : " + judulBuku + "\n" +
+                        "» ID Buku    : " + idBuku + "\n" +
+                        "» ID Anggota : " + idAnggotaLogin + "\n\n" +
+                        "Status: Menunggu validasi database lokal petugas.",
+                "BooksHub Notification",
+                JOptionPane.INFORMATION_MESSAGE);
     }
 
     public static void main(String[] args) {
